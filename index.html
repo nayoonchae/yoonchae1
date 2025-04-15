@@ -1,21 +1,285 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>연속 미적분 문제</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <title>AI 주식 투자 시뮬레이터</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #121212;
+      color: #ffffff;
+      margin: 0;
+      padding: 0;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      width: 100%;
+      background-color: #1f1f1f;
+      padding: 20px;
+      z-index: 1;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    }
+
+    .container {
+      padding-top: 160px;
+      max-width: 800px;
+      margin: auto;
+      text-align: center;
+      position: relative;
+      z-index: 2;
+    }
+
+    .info {
+      font-size: 18px;
+      margin: 10px;
+    }
+
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      font-size: 16px;
+      background: #03dac5;
+      color: black;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    #logBox {
+      background: #1e1e1e;
+      padding: 15px;
+      margin: 20px auto;
+      text-align: left;
+      border-radius: 10px;
+      width: 90%;
+      max-width: 700px;
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #333;
+    }
+
+    canvas {
+      background: #202020;
+      border-radius: 10px;
+      margin-top: 20px;
+    }
+
+    h1 {
+      color: #03dac5;
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h1>고등학교 미적분 문제</h1>
-    <p id="question"></p>
-    
-    <label for="userAnswer">답을 입력하세요:</label>
-    <input type="text" id="userAnswer" placeholder="예: 1">
-    <button onclick="checkAnswer()">정답 확인</button>
-    <div id="feedback"></div>
+
+<header>
+  <h1 style="text-align:center;">📈 AI 주식 투자 시뮬레이터</h1>
+  <div class="info">💰 현금: <span id="cash">₩1,000,000</span> | 📦 보유 주식: <span id="stocks">0</span>주 | 📊 주가: <span id="stockPrice">₩100,000</span></div>
+  <div class="info">💼 총 평가 금액: <span id="totalValue">₩1,000,000</span> | 📈 수익률: <span id="profit">0%</span></div>
+</header>
+
+<div class="container">
+  <button onclick="buyStock()">매수</button>
+  <button onclick="sellStock()">매도</button>
+  <button onclick="nextDay()">다음 날 ▶</button>
+  <button onclick="aiTrade()">🤖 단순 AI 매매</button>
+  <button onclick="aiPredictTrade()">📊 AI 예측 매매</button>
+  <button onclick="resetGame()">🔄 초기화</button>
+
+  <div id="logBox">
+    <strong>📚 거래 내역:</strong>
+    <div id="log"></div>
   </div>
 
-  <script src="script.js"></script>
+  <canvas id="priceChart" width="700" height="300"></canvas>
+</div>
+
+<script>
+  let initialCash = 1000000;
+  let cash = initialCash;
+  let stockPrice = 100000;
+  let stocks = 0;
+  let history = [stockPrice];
+  let logDiv = document.getElementById("log");
+
+  const priceSpan = document.getElementById("stockPrice");
+  const cashSpan = document.getElementById("cash");
+  const stockSpan = document.getElementById("stocks");
+  const totalValueSpan = document.getElementById("totalValue");
+  const profitSpan = document.getElementById("profit");
+
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ['Day 1'],
+      datasets: [{
+        label: '주가',
+        data: history,
+        borderColor: '#03dac5',
+        backgroundColor: 'rgba(3, 218, 197, 0.2)',
+        tension: 0.1
+      }]
+    },
+    options: {
+      responsive: false,
+      scales: {
+        y: { beginAtZero: false }
+      },
+      plugins: {
+        legend: { labels: { color: "#fff" } },
+      }
+    }
+  });
+
+  function formatCash(value) {
+    return '₩' + value.toLocaleString();
+  }
+
+  function updateDisplay() {
+    priceSpan.textContent = formatCash(stockPrice);
+    cashSpan.textContent = formatCash(cash);
+    stockSpan.textContent = stocks;
+    const totalValue = cash + (stockPrice * stocks);
+    totalValueSpan.textContent = formatCash(totalValue);
+    const profitRate = (((totalValue - initialCash) / initialCash) * 100).toFixed(2);
+    profitSpan.textContent = profitRate + '%';
+  }
+
+  function log(message) {
+    const p = document.createElement("p");
+    p.textContent = message;
+    logDiv.prepend(p);
+  }
+
+  function buyStock() {
+    if (cash >= stockPrice) {
+      cash -= stockPrice;
+      stocks++;
+      log(`🟢 매수 - 주가: ${formatCash(stockPrice)}`);
+      updateDisplay();
+      saveState();
+    } else {
+      log("❌ 매수 실패 - 잔액 부족");
+    }
+  }
+
+  function sellStock() {
+    if (stocks > 0) {
+      cash += stockPrice;
+      stocks--;
+      log(`🔴 매도 - 주가: ${formatCash(stockPrice)}`);
+      updateDisplay();
+      saveState();
+    } else {
+      log("❌ 매도 실패 - 주식 없음");
+    }
+  }
+
+  function nextDay() {
+    const change = Math.floor(stockPrice * (Math.random() * 0.2 - 0.1));
+    stockPrice = Math.max(1000, stockPrice + change);
+    history.push(stockPrice);
+    chart.data.labels.push('Day ' + history.length);
+    chart.data.datasets[0].data = history;
+    chart.update();
+    log(`📅 다음 날 - 주가: ${formatCash(stockPrice)}`);
+    updateDisplay();
+    saveState();
+  }
+
+  // 단순 AI
+  function aiTrade() {
+    if (history.length < 2) {
+      log("🤖 단순 AI 판단 불가: 데이터 부족");
+      return;
+    }
+
+    const prev = history[history.length - 2];
+    const current = history[history.length - 1];
+
+    if (current < prev && cash >= stockPrice) {
+      buyStock();
+      log("🤖 단순 AI 판단: 매수");
+    } else if (current > prev && stocks > 0) {
+      sellStock();
+      log("🤖 단순 AI 판단: 매도");
+    } else {
+      log("🤖 단순 AI 판단: 대기");
+    }
+  }
+
+  // 예측 기반 AI (이동 평균 + 유동 수량)
+  function aiPredictTrade() {
+    if (history.length < 6) {
+      log("📊 AI 예측 불가: 최소 6일 데이터 필요");
+      return;
+    }
+
+    const recent = history.slice(-5);
+    const average = recent.reduce((a, b) => a + b, 0) / 5;
+
+    if (stockPrice < average && cash >= stockPrice) {
+      let maxBuy = Math.floor(cash / stockPrice);
+      let amountToBuy = Math.max(1, Math.floor(maxBuy * 0.4));
+      cash -= amountToBuy * stockPrice;
+      stocks += amountToBuy;
+      log(`📊 AI 예측: 평균보다 낮음 → ${amountToBuy}주 매수`);
+    } else if (stockPrice > average && stocks > 0) {
+      let amountToSell = Math.max(1, Math.floor(stocks * 0.4));
+      cash += amountToSell * stockPrice;
+      stocks -= amountToSell;
+      log(`📊 AI 예측: 평균보다 높음 → ${amountToSell}주 매도`);
+    } else {
+      log("📊 AI 예측: 관망");
+    }
+
+    updateDisplay();
+    saveState();
+  }
+
+  function resetGame() {
+    if (confirm("정말 초기화하시겠습니까?")) {
+      cash = initialCash;
+      stockPrice = 100000;
+      stocks = 0;
+      history = [stockPrice];
+      chart.data.labels = ['Day 1'];
+      chart.data.datasets[0].data = history;
+      chart.update();
+      logDiv.innerHTML = '';
+      updateDisplay();
+      localStorage.clear();
+    }
+  }
+
+  function saveState() {
+    localStorage.setItem("stock_simulator", JSON.stringify({
+      cash, stockPrice, stocks, history
+    }));
+  }
+
+  function loadState() {
+    const saved = localStorage.getItem("stock_simulator");
+    if (saved) {
+      const state = JSON.parse(saved);
+      cash = state.cash;
+      stockPrice = state.stockPrice;
+      stocks = state.stocks;
+      history = state.history;
+      chart.data.labels = history.map((_, i) => 'Day ' + (i + 1));
+      chart.data.datasets[0].data = history;
+      chart.update();
+      updateDisplay();
+      log("📂 이전 기록 불러오기 완료");
+    }
+  }
+
+  loadState();
+  updateDisplay();
+</script>
+
 </body>
 </html>
